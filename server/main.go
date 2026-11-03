@@ -237,6 +237,17 @@ func modelReportAttempt(ctx context.Context, in Input, feedback string, previous
 		return out, errors.New("Model request failed or timed out. Retry when the connection is available.")
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusBadRequest {
+		var apiError struct {
+			Error struct {
+				Message string `json:"message"`
+				Code    string `json:"code"`
+			} `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 10000)).Decode(&apiError) == nil {
+			return out, fmt.Errorf("Model API rejected request (HTTP 400): %s", apiError.Error.Message)
+		}
+	}
 	if resp.StatusCode != 200 {
 		return out, fmt.Errorf("Model API returned HTTP %d. Check model access, credentials, or quota in your server configuration.", resp.StatusCode)
 	}
