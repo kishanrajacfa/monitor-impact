@@ -1,34 +1,69 @@
-# Signal: monitor impact, chapter 1
+# Signal — Monitor Impact
 
-A learning prototype: paste a Git diff, paste or upload a JSON monitor inventory, and inspect potential monitoring impacts. React handles the interface; Go validates inputs and calls OpenAI. Nothing changes your monitors.
+Find log monitors that may stop matching after a code change.
 
-## Run locally
+Signal compares a Git diff with monitor queries and produces an evidence-based review: which monitors may be affected, why, and what to verify next. Use the browser for an individual review, the CLI for scripts, or GitHub Actions to analyze pull requests automatically.
 
-Requires Node.js 20.19+ (or 22.12+) and Go 1.22+.
+**Status:** Local prototype with advisory reports. Signal does not modify monitors, update queries, or block merges based on findings.
+
+## Example
+
+A coffee machine changes its completion log:
+
+```diff
+- slog.Info("Coffee_Brew: Complete", "service", "coffee-machine")
++ slog.Info("Your coffee is ready", "service", "coffee-machine")
+```
+
+A monitor still searches for `service:coffee-machine "Coffee_Brew: Complete"`. Signal flags a potential impact, quotes the change, and recommends checking the new logs before updating the query.
+
+The included examples use a fictional coffee machine. They also cover a cleaning failure changing from ERROR to WARN and an unrelated menu-label edit.
+
+## Quick start
+
+### Requirements
+
+- Go 1.22 or later
+- Node.js 20.19+ or 22.12+
+- An OpenAI API key for AI analysis; no key is needed for Demo mode
+
+### Run locally
 
 ```sh
-cd web
-npm install
-npm run build
-cd ..
+git clone https://github.com/kishanrajacfa/monitor-impact.git
+cd monitor-impact
+npm --prefix web ci
+npm --prefix web run build
 go run ./server
 ```
 
-Open http://127.0.0.1:8080. Click **Load example**, then **Analyze monitor impact** in Demo mode. Demo is an exact-string heuristic, not an AI model. An unrelated monitor returns insufficient context because the heuristic cannot reason about it.
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080). Click **Load example**, keep **Demo** selected, and click **Analyze monitor impact**.
 
-For development, run `go run ./server` at the project root and `npm run dev` in `web` in separate terminals. Vite proxies `/api` to Go.
+Demo mode runs a local exact-string heuristic. It is useful for trying the interface, but it does not call an AI model or reason about code behavior. Stop the server with **Ctrl+C**.
 
-## Enable real AI
+### Enable AI analysis
 
-Set `OPENAI_API_KEY` and `OPENAI_MODEL` in your server's environment before starting it. Select a model available to your API project that supports the Responses API and Structured Outputs. Keep the key in the server environment; never paste it into this chat, the UI, or source files. The app does not load `.env` automatically.
+Set these environment variables in the terminal that starts the server:
 
-Select **AI** in the interface. That mode sends the supplied diff and monitor inventory to OpenAI. Demo mode stays local. There is no automatic fallback: an AI error stays an error.
+| Variable         | Purpose                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY` | An API key with access to the selected model                                        |
+| `OPENAI_MODEL`   | A model supporting the Responses API and Structured Outputs, such as `gpt-4.1-mini` |
 
-The implementation uses the [official Structured Outputs contract](https://developers.openai.com/api/docs/guides/structured-outputs): Responses API `text.format`, JSON Schema, and `strict: true`. `store: false` disables response storage; it is not a promise of zero data retention.
+Provide the key through your shell or secret manager, then start the server:
 
-## Input contract
+```sh
+export OPENAI_MODEL=gpt-4.1-mini
+go run ./server
+```
 
-The uploaded file is an array, not a Datadog API export wrapper:
+Restart an existing server after changing its environment. In the browser, select **AI · OpenAI model** before analyzing. Configuring credentials does not change the selected mode automatically.
+
+AI mode sends the supplied diff and monitor queries to OpenAI and may incur API charges. Keep API keys out of source files and browser inputs. The app does not automatically load `.env` files. API failures are reported as errors; they do not fall back to Demo mode.
+
+## Monitor inventory
+
+Supply a JSON array of monitors, each with a unique `name` and a nonempty `query`:
 
 ```json
 [
@@ -36,79 +71,114 @@ The uploaded file is an array, not a Datadog API export wrapper:
     "name": "Coffee Brew Success",
     "query": "service:coffee-machine \"Coffee_Brew: Complete\""
   },
-  { "name": "Cleaning Errors", "query": "service:coffee-machine status:error" }
+  {
+    "name": "Cleaning Errors",
+    "query": "service:coffee-machine status:error"
+  }
 ]
 ```
 
-Names must be unique. Maximum: 100 monitors, a 100 KB diff, and a 200 KB request body. Smaller batches may be needed to fit model output limits.
+- **Browser:** Paste or upload the inventory in the form.
+- **CLI:** Pass the inventory file with `-monitors`.
+- **GitHub Actions:** Edit [`monitors.json`](monitors.json). The workflow reads the inventory from the PR's base commit, so inventory updates take effect after they are merged.
 
-## Your first lesson: follow one request
+There is no automatic sync with a monitoring platform. Provider-specific exports must be converted to this array format.
 
-1. `web/src/main.jsx` turns your form into `POST /api/analyze`. The UI never calls the model directly.
-2. `server/main.go` checks the request before spending model tokens. A token is a chunk of text the model processes; more input and output generally means more work and cost.
-3. `server/prompt.txt` defines the review task, statuses, evidence rules, and uncertainty behavior. Your diff and queries are input data, not trusted instructions.
-4. `modelReport` sends the prompt, inputs, and response schema to OpenAI. A schema is a contract for the shape of the answer.
-5. `validate` checks monitor identity, coverage, status, explanations, and literal diff evidence. This catches some bad answers; a real quote can still support an incorrect interpretation.
-6. React renders the result. You verify it against actual code, logs, and query behavior before acting.
+## Command-line usage
 
-**Try this exercise:** analyze the sample in demo mode. Then add another `+` line that still logs `Coffee_Brew: Complete`. Analyze again. Why does the warning disappear? The heuristic checks added lines, but it does not understand execution paths. That limitation motivates model reasoning and, later, evaluations.
-
-## What to learn next
-
-Before changing prompts, write down expected outcomes for: a renamed log message, an unrelated code change, an unchanged message moved between lines, a structured-field rename, and a severity change. Run the same cases after every prompt revision. Track missed impacts and false alarms separately. A plausible explanation is not a passing evaluation.
-
-We deliberately have no embeddings, retrieval, database, or autonomous agent yet. For small inventories, the whole inventory fits in one request. Add retrieval only when input size or evaluation results justify it.
-
-## Validation
-
-`go test ./...` checks demo behavior, rejects fabricated evidence and altered monitor identities, checks invalid inputs, and tests the model HTTP contract with a fake server. `cd web && npm run build` checks the production frontend build. The fake server does not measure model quality. Real-model behavior requires your API credentials and a labeled evaluation set.
-
-This is a localhost prototype, with no authentication, persistence, GitHub integration, or Datadog integration. It is not prepared for public hosting.
-
-## Chapter 2: GitHub pull-request automation
-
-The repository is https://github.com/kishanrajacfa/monitor-impact.
-
-The same analyzer now works without a browser or web server:
+Run the sample without an API key:
 
 ```sh
-go run ./server -diff examples/brew.diff -monitors monitors.json -mode demo -output report.json -summary report.md
+go run ./server \
+  -diff examples/brew.diff \
+  -monitors monitors.json \
+  -mode demo \
+  -output report.json \
+  -summary report.md
 ```
 
-For a real model request, configure `OPENAI_API_KEY` and `OPENAI_MODEL` in the shell and replace `-mode demo` with `-mode ai`. CLI mode defaults to AI and does not start an HTTP server. Findings remain advisory; a successful analysis exits zero even if it finds potential impacts. Invalid inputs, unavailable credentials, API errors, and invalid reports exit nonzero.
+With the API environment variables configured, use `-mode ai` to call the model. CLI mode defaults to AI when `-mode` is omitted. Supplying `-diff` runs the CLI instead of starting the web server.
 
-### Enable GitHub Actions
+The command writes a JSON report and a readable Markdown report. It exits successfully when analysis completes, including when potential impacts are found. Invalid input, API errors, and rejected reports produce a nonzero exit code.
 
-1. In GitHub, open this repository's **Settings → Secrets and variables → Actions**.
-2. Under **Secrets**, create a repository secret named `OPENAI_API_KEY` using your replacement API key. Do not commit the key or paste it into chat.
-3. Optionally, under **Variables**, add `OPENAI_MODEL`. The workflow defaults to `gpt-4.1-mini`.
-4. Open **Actions → Monitor impact → Run workflow** on `main`. This manual run analyzes `examples/brew.diff`, making it a quick integration check before opening a PR.
-5. Inspect the run summary and download `monitor-impact-report`. Confirm its JSON has `mode: ai` and the expected model. Manual runs make real API requests too.
-6. Create a branch, change the log message in `examples/brewing.go` from `Coffee_Brew: Complete` to `Your coffee is ready`, commit, push, and open a PR to `main`.
-7. Open the PR's **Checks** and select **Monitor impact** to read the run summary. Updating the PR reruns the analysis. Reports are retained for seven days; API errors fail the check, while findings themselves do not.
+## Pull-request automation
 
-Replace `monitors.json` with your real inventory before expecting useful coverage. The workflow reads this file from the PR's base commit, so changes to monitor definitions take effect after merging them. All supplied diff text and monitor queries are sent to OpenAI.
+The included [GitHub Actions workflow](.github/workflows/monitor-impact.yml) analyzes non-draft PRs from branches in the same repository when they are opened or updated. Fork and Dependabot PRs are skipped.
 
-### How the workflow works
+To enable it in a copy of this repository:
 
-`.github/workflows/monitor-impact.yml` responds to PR changes or a manual run. It checks out the base commit's analyzer and inventory, collects the three-dot Git diff from the merge base to the PR head, and invokes the CLI with the API key only in the analysis step. No PR code is built or executed. The JSON and readable report are uploaded as run artifacts, and the readable report appears in the Actions summary. Model/input text is HTML-escaped before rendering.
+1. Open **Settings → Secrets and variables → Actions**.
+2. Add a repository secret named `OPENAI_API_KEY`.
+3. Optionally add a repository variable named `OPENAI_MODEL`. The default is `gpt-4.1-mini`.
+4. Replace `monitors.json` with the monitor inventory to review against.
+5. Open **Actions → Monitor impact → Run workflow** to test the integration using `examples/brew.diff`.
 
-The first version processes non-draft PRs from branches in the same repository. Fork and Dependabot PRs are skipped because they do not receive the model secret. Do not enable secret access for fork workflows to work around that limitation. Only trusted collaborators should have write access to this learning repository. We use `pull_request`, not `pull_request_target`, and only read permission for the GitHub token. There is no PR-comment bot or automatic query update yet.
+For a PR, open **Checks → Monitor impact** and follow the link to the Actions run. The report appears in the run summary and as a downloadable `monitor-impact-report` artifact, retained for seven days. Findings are advisory; execution or validation errors fail the check.
 
-Diffs over 100 KB are rejected rather than silently truncated. This avoids presenting a partial review as complete. Later we can add explicit batching and coverage reporting.
+The workflow runs the analyzer from the base commit and treats the PR checkout as diff data. It does not build or execute the changed application code. The GitHub token has read-only repository-content permission. Only trusted collaborators should have write access to the repository and its workflows.
 
-Model reports are validated before use. If a completed response fails evidence or monitor-identity validation, the analyzer sends the failed report and validation feedback for one repair attempt. A second invalid answer fails the run; the checks are never relaxed. A repair can add one model call and its associated latency and cost. This improves structural reliability, not proof that the model's interpretation is correct.
+## Report format and validation
 
-## Coffee-machine demo story
+Each monitor receives one assessment:
 
-Imagine a coffee machine with two monitors. **Coffee Brew Success** counts logs containing `Coffee_Brew: Complete`. **Cleaning Errors** searches for `service:coffee-machine status:error`.
+| Status                 | Meaning                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| `potential_impact`     | A change may affect the monitor; inspect the evidence and verify it.              |
+| `no_evidence`          | No impact was identified in the supplied diff. This is not a guarantee of safety. |
+| `insufficient_context` | The available inputs do not support a reliable assessment.                        |
 
-The sample PR makes three changes:
+Findings include the original monitor name and query, diff evidence, an explanation, a suggested next step, and missing context.
 
-- Rename the brew-complete message to `Your coffee is ready`. The success monitor may stop matching.
-- Lower a failed cleaning cycle from ERROR to WARN. The error monitor may miss it, depending on how severity maps to `status`.
-- Change the coffee menu label. That changes display text without changing a log event.
+AI responses use [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs). Go independently validates monitor identity, coverage, allowed statuses, explanations, and literal diff evidence. For small diffs, the model selects evidence line IDs that Go expands into exact source text. Larger diffs use free-text evidence with literal-substring validation.
 
-Demo narration: “The machine still makes coffee, but our dashboard may stop counting it because the log text changed. The reviewer compares the code change with our monitor queries and suggests what to verify.” These are fictional examples.
+A completed report that fails validation gets one repair attempt with feedback. A second invalid report is rejected. A repair can incur an additional model call. These checks improve report consistency and grounding; they do not establish that an interpretation is correct.
 
-For small diffs (up to 199 distinct changed lines), the model selects an evidence line ID from an enumeration. The server expands the ID to the exact changed line, preserving tabs, quotes, and patch markers. Larger diffs retain free-text evidence with the same literal-substring validation and bounded repair. Schema constraints ground the quote; they do not prove the interpretation.
+## Development
+
+Run these commands in separate terminals from the repository root:
+
+```sh
+# Backend
+go run ./server
+```
+
+```sh
+# Frontend with live updates
+npm --prefix web run dev
+```
+
+Open the URL printed by Vite. Its development proxy forwards `/api` requests to Go on port 8080.
+
+### Project layout
+
+```text
+web/src/main.jsx       React inputs, API request, and report rendering
+web/src/style.css      Interface styling
+server/main.go         HTTP routes, model integration, and validation
+server/prompt.txt      Model review instructions
+server/cli.go          File-based analysis and report generation
+server/*_test.go       Backend and CLI tests
+monitors.json          Monitor inventory for automated analysis
+examples/              Fictional coffee-machine fixtures
+.github/workflows/     Pull-request workflow
+```
+
+### Checks and formatting
+
+```sh
+go test ./...
+npm --prefix web run build
+npm --prefix web run format:check
+```
+
+Format supported files with `npm --prefix web run format`. Format Go files with `gofmt`.
+
+The Go tests cover input validation, demo behavior, model-request handling, evidence checks, bounded repair, and report generation. Model calls in those tests use a fake HTTP server; they do not measure real-model accuracy.
+
+## Limits
+
+- Up to 100 monitors, a 100 KB diff, and a 200 KB HTTP request body. Oversized diffs are rejected rather than truncated.
+- Each model request has a 90-second timeout; CLI analysis has a 95-second overall timeout. Smaller batches may be needed to fit output limits.
+- Reviews only use the supplied diff and queries. Signal cannot confirm deployment state, runtime behavior, or severity-to-status mappings without additional context.
+- No authentication, rate limiting, persistence, or monitoring-platform connection. The web server binds to localhost and is not prepared for public hosting.
+- Requests set `store: false`; this is not a zero-data-retention guarantee.
