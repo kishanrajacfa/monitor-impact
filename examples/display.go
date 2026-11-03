@@ -1,5 +1,5 @@
 package examples
 
 func coffeeDisplayLabel() string {
-	return "Coffee menu"
+	return "Coffee menu details"
 }

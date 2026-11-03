@@ -3,5 +3,5 @@ package examples
 import "log/slog"
 
 func recordCleaningFailure() {
-	slog.Error("Cleaning cycle failed", "service", "coffee-machine")
+	slog.Warn("Cleaning cycle failed", "service", "coffee-machine")
 }
