@@ -1,4 +1,7 @@
 [
-  {"name": "Coffee Brew Success", "query": "service:coffee-machine \"Coffee_Brew: Complete\""},
-  {"name": "Cleaning Errors", "query": "service:coffee-machine status:error"}
+  {
+    "name": "Coffee Brew Success",
+    "query": "service:coffee-machine \"Coffee_Brew: Complete\""
+  },
+  { "name": "Cleaning Errors", "query": "service:coffee-machine status:error" }
 ]

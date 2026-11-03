@@ -32,8 +32,11 @@ The uploaded file is an array, not a Datadog API export wrapper:
 
 ```json
 [
-  {"name": "Coffee Brew Success", "query": "service:coffee-machine \"Coffee_Brew: Complete\""},
-  {"name": "Cleaning Errors", "query": "service:coffee-machine status:error"}
+  {
+    "name": "Coffee Brew Success",
+    "query": "service:coffee-machine \"Coffee_Brew: Complete\""
+  },
+  { "name": "Cleaning Errors", "query": "service:coffee-machine status:error" }
 ]
 ```
 
