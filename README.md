@@ -93,3 +93,5 @@ Replace `monitors.json` with your real inventory before expecting useful coverag
 The first version processes non-draft PRs from branches in the same repository. Fork and Dependabot PRs are skipped because they do not receive the model secret. Do not enable secret access for fork workflows to work around that limitation. Only trusted collaborators should have write access to this learning repository. We use `pull_request`, not `pull_request_target`, and only read permission for the GitHub token. There is no PR-comment bot or automatic query update yet.
 
 Diffs over 100 KB are rejected rather than silently truncated. This avoids presenting a partial review as complete. Later we can add explicit batching and coverage reporting.
+
+Model reports are validated before use. If a completed response fails evidence or monitor-identity validation, the analyzer sends the failed report and validation feedback for one repair attempt. A second invalid answer fails the run; the checks are never relaxed. A repair can add one model call and its associated latency and cost. This improves structural reliability, not proof that the model's interpretation is correct.
