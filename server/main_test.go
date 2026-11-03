@@ -149,10 +149,12 @@ func TestEvidenceSchemaPreservesLiteralChangedLines(t *testing.T) {
 		format := body["text"].(map[string]any)["format"].(map[string]any)
 		props := format["schema"].(map[string]any)["properties"].(map[string]any)["findings"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
 		choices := props["evidence"].(map[string]any)["enum"].([]any)
-		if len(choices) != 3 || choices[1] != "-\tslog.Info(\"Coffee_Brew: Complete\")" || choices[2] != "+\tslog.Info(\"Your coffee is ready\")" {
+		if len(choices) != 3 || choices[1] != "L1" || choices[2] != "L2" {
 			t.Errorf("unexpected literal choices: %v", choices)
 		}
 		out := demo(in)
+		out.Findings[0].Status = "potential_impact"
+		out.Findings[0].Evidence = "L1"
 		raw, _ := json.Marshal(out)
 		json.NewEncoder(w).Encode(map[string]any{"status": "completed", "output": []any{map[string]any{"content": []any{map[string]any{"type": "output_text", "text": string(raw)}}}}})
 	}))
@@ -160,7 +162,11 @@ func TestEvidenceSchemaPreservesLiteralChangedLines(t *testing.T) {
 	prior := endpoint
 	endpoint = s.URL
 	defer func() { endpoint = prior }()
-	if _, err := modelReport(context.Background(), in); err != nil {
+	out, err := modelReport(context.Background(), in)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if out.Findings[0].Evidence != "-\tslog.Info(\"Coffee_Brew: Complete\")" {
+		t.Fatal("line ID did not expand to literal source")
 	}
 }
