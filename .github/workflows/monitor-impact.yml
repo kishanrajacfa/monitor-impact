@@ -51,7 +51,7 @@ jobs:
           if [ "$EVENT_NAME" = pull_request ]; then
             git -C changes diff --no-ext-diff --no-textconv "$BASE_SHA...$HEAD_SHA" -- > "$RUNNER_TEMP/pr.diff"
           else
-            cp analyzer/examples/arrival.diff "$RUNNER_TEMP/pr.diff"
+            cp analyzer/examples/brew.diff "$RUNNER_TEMP/pr.diff"
           fi
       - name: Analyze with AI
         env:

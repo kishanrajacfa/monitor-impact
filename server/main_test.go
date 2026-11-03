@@ -10,7 +10,7 @@ import (
 )
 
 func fixture() Input {
-	return Input{Diff: "- log.Info(\"old event\")\n+ log.Info(\"new event\")", Monitors: []Monitor{{Name: "arrival", Query: "logs(\"old event\")"}}, Mode: "demo"}
+	return Input{Diff: "- log.Info(\"old event\")\n+ log.Info(\"new event\")", Monitors: []Monitor{{Name: "coffee", Query: "logs(\"old event\")"}}, Mode: "demo"}
 }
 func TestDemoAndEvidence(t *testing.T) {
 	in := fixture()
