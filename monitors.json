@@ -1,0 +1,4 @@
+[
+  {"name": "Driver Arrival Success", "query": "service:dispatch \"Driver_Arrival: Successful\""},
+  {"name": "Payment Errors", "query": "service:payments status:error"}
+]

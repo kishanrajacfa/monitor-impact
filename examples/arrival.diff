@@ -1,0 +1,8 @@
+diff --git a/examples/arrival.go b/examples/arrival.go
+--- a/examples/arrival.go
++++ b/examples/arrival.go
+@@ -3,3 +3,3 @@
+ func recordArrival() string {
+- return "Driver_Arrival: Successful"
++ return "marketplace fulfillment updated"
+ }

@@ -1,0 +1,79 @@
+name: Monitor impact
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: monitor-impact-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  analyze:
+    # Fork and Dependabot PRs do not receive the model secret.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.actor != 'dependabot[bot]' && !github.event.pull_request.draft)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Execute the analyzer and read the inventory from the trusted base branch.
+      - name: Check out analyzer
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: analyzer
+          persist-credentials: false
+      # This checkout is only diff data. No PR code is built or executed.
+      - name: Check out PR for diff
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: changes
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: analyzer/go.mod
+          cache: false
+      - name: Build trusted analyzer
+        working-directory: analyzer
+        run: go build -o "$RUNNER_TEMP/monitor-impact" ./server
+      - name: Collect diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            git -C changes diff --no-ext-diff --no-textconv "$BASE_SHA...$HEAD_SHA" -- > "$RUNNER_TEMP/pr.diff"
+          else
+            cp analyzer/examples/arrival.diff "$RUNNER_TEMP/pr.diff"
+          fi
+      - name: Analyze with AI
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4.1-mini' }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo '::error::Add the OPENAI_API_KEY repository Actions secret before running AI analysis.'
+            exit 1
+          fi
+          if [ ! -s "$RUNNER_TEMP/pr.diff" ]; then
+            echo 'No diff to analyze.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          "$RUNNER_TEMP/monitor-impact" -diff "$RUNNER_TEMP/pr.diff" -monitors analyzer/monitors.json -mode ai -output "$RUNNER_TEMP/report.json" -summary "$RUNNER_TEMP/report.md"
+          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitor-impact-report
+          path: |
+            ${{ runner.temp }}/report.json
+            ${{ runner.temp }}/report.md
+          if-no-files-found: ignore
+          retention-days: 7

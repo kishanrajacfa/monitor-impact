@@ -1,0 +1,6 @@
+.env
+node_modules/
+web/dist/
+report.json
+report.md
+.DS_Store
