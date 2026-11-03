@@ -79,3 +79,61 @@ func TestModelContract(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRepairInvalidEvidenceOnce(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test")
+	t.Setenv("OPENAI_MODEL", "test-model")
+	in := fixture()
+	calls := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		out := demo(in)
+		if calls == 1 {
+			out.Findings[0].Evidence = "invented evidence"
+		} else if !strings.Contains(body["input"].(string), "validation_error") {
+			t.Error("missing repair feedback")
+		}
+		report, _ := json.Marshal(out)
+		json.NewEncoder(w).Encode(map[string]any{"status": "completed", "output": []any{map[string]any{"content": []any{map[string]any{"type": "output_text", "text": string(report)}}}}})
+	}))
+	defer s.Close()
+	prior := endpoint
+	endpoint = s.URL
+	defer func() { endpoint = prior }()
+	out, err := modelReport(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected two calls, got %d", calls)
+	}
+	if err = validate(in, out); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRepairStillRejectsInventedEvidence(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test")
+	t.Setenv("OPENAI_MODEL", "test-model")
+	in := fixture()
+	calls := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		out := demo(in)
+		out.Findings[0].Evidence = "invented"
+		raw, _ := json.Marshal(out)
+		json.NewEncoder(w).Encode(map[string]any{"status": "completed", "output": []any{map[string]any{"content": []any{map[string]any{"type": "output_text", "text": string(raw)}}}}})
+	}))
+	defer s.Close()
+	prior := endpoint
+	endpoint = s.URL
+	defer func() { endpoint = prior }()
+	if _, err := modelReport(context.Background(), in); err == nil {
+		t.Fatal("accepted invalid repair")
+	}
+	if calls != 2 {
+		t.Fatalf("unbounded retry: %d", calls)
+	}
+}
