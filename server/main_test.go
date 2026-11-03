@@ -137,3 +137,30 @@ func TestRepairStillRejectsInventedEvidence(t *testing.T) {
 		t.Fatalf("unbounded retry: %d", calls)
 	}
 }
+
+func TestEvidenceSchemaPreservesLiteralChangedLines(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "test")
+	t.Setenv("OPENAI_MODEL", "test-model")
+	in := fixture()
+	in.Diff = "--- a/coffee.go\n+++ b/coffee.go\n-\tslog.Info(\"Coffee_Brew: Complete\")\n+\tslog.Info(\"Your coffee is ready\")"
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		format := body["text"].(map[string]any)["format"].(map[string]any)
+		props := format["schema"].(map[string]any)["properties"].(map[string]any)["findings"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+		choices := props["evidence"].(map[string]any)["enum"].([]any)
+		if len(choices) != 3 || choices[1] != "-\tslog.Info(\"Coffee_Brew: Complete\")" || choices[2] != "+\tslog.Info(\"Your coffee is ready\")" {
+			t.Errorf("unexpected literal choices: %v", choices)
+		}
+		out := demo(in)
+		raw, _ := json.Marshal(out)
+		json.NewEncoder(w).Encode(map[string]any{"status": "completed", "output": []any{map[string]any{"content": []any{map[string]any{"type": "output_text", "text": string(raw)}}}}})
+	}))
+	defer s.Close()
+	prior := endpoint
+	endpoint = s.URL
+	defer func() { endpoint = prior }()
+	if _, err := modelReport(context.Background(), in); err != nil {
+		t.Fatal(err)
+	}
+}

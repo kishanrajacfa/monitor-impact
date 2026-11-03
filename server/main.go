@@ -200,6 +200,21 @@ func modelReportAttempt(ctx context.Context, in Input, feedback string, previous
 	for _, k := range fields {
 		properties[k] = map[string]any{"type": "string"}
 	}
+	// Constrain small-diff evidence to literal changed lines. This preserves tabs
+	// and patch markers instead of relying on the model to reproduce them.
+	candidates := []string{""}
+	seenEvidence := map[string]bool{"": true}
+	for _, line := range strings.Split(in.Diff, "\n") {
+		if (strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++")) || (strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---")) {
+			if !seenEvidence[line] {
+				candidates = append(candidates, line)
+				seenEvidence[line] = true
+			}
+		}
+	}
+	if len(candidates) <= 200 {
+		properties["evidence"] = map[string]any{"type": "string", "enum": candidates}
+	}
 	properties["status"] = map[string]any{"type": "string", "enum": []string{"potential_impact", "no_evidence", "insufficient_context"}}
 	schema := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"findings"}, "properties": map[string]any{"findings": map[string]any{"type": "array", "items": map[string]any{"type": "object", "additionalProperties": false, "required": fields, "properties": properties}}}}
 	payload := map[string]any{"diff": in.Diff, "monitors": in.Monitors}
