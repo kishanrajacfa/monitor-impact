@@ -107,3 +107,5 @@ The sample PR makes three changes:
 - Change the coffee menu label. That changes display text without changing a log event.
 
 Demo narration: “The machine still makes coffee, but our dashboard may stop counting it because the log text changed. The reviewer compares the code change with our monitor queries and suggests what to verify.” These are fictional examples.
+
+For small diffs (up to 199 distinct changed lines), the model's evidence field is constrained to an enumeration of exact changed lines plus the empty string. This preserves tabs and patch markers. Larger diffs retain free-text evidence with the same literal-substring validation and bounded repair. Schema constraints ground the quote; they do not prove the interpretation.
