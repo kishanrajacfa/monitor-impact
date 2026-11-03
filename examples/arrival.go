@@ -1,6 +1,8 @@
 package examples
 
-// Change this string on a branch to exercise the pull-request workflow.
-func recordArrival() string {
-	return "Driver_Arrival: Successful"
+import "log/slog"
+
+// These examples are fixtures for reviewing log changes, not production handlers.
+func recordArrival() {
+	slog.Info("Driver_Arrival: Successful", "service", "dispatch")
 }
