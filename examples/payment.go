@@ -3,5 +3,5 @@ package examples
 import "log/slog"
 
 func recordPaymentFailure() {
-	slog.Error("Payment authorization failed", "service", "payments")
+	slog.Warn("Payment authorization failed", "service", "payments")
 }

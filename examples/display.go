@@ -1,5 +1,5 @@
 package examples
 
 func arrivalDisplayLabel() string {
-	return "Driver arrival"
+	return "Driver arrival details"
 }
