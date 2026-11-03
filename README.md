@@ -32,8 +32,8 @@ The uploaded file is an array, not a Datadog API export wrapper:
 
 ```json
 [
-  {"name": "Driver Arrival Success", "query": "service:dispatch \"Driver_Arrival: Successful\""},
-  {"name": "Payment Errors", "query": "service:payments status:error"}
+  {"name": "Coffee Brew Success", "query": "service:coffee-machine \"Coffee_Brew: Complete\""},
+  {"name": "Cleaning Errors", "query": "service:coffee-machine status:error"}
 ]
 ```
 
@@ -48,7 +48,7 @@ Names must be unique. Maximum: 100 monitors, a 100 KB diff, and a 200 KB request
 5. `validate` checks monitor identity, coverage, status, explanations, and literal diff evidence. This catches some bad answers; a real quote can still support an incorrect interpretation.
 6. React renders the result. You verify it against actual code, logs, and query behavior before acting.
 
-**Try this exercise:** analyze the sample in demo mode. Then add another `+` line that still logs `Driver_Arrival: Successful`. Analyze again. Why does the warning disappear? The heuristic checks added lines, but it does not understand execution paths. That limitation motivates model reasoning and, later, evaluations.
+**Try this exercise:** analyze the sample in demo mode. Then add another `+` line that still logs `Coffee_Brew: Complete`. Analyze again. Why does the warning disappear? The heuristic checks added lines, but it does not understand execution paths. That limitation motivates model reasoning and, later, evaluations.
 
 ## What to learn next
 
@@ -69,7 +69,7 @@ The repository is https://github.com/kishanrajacfa/monitor-impact.
 The same analyzer now works without a browser or web server:
 
 ```sh
-go run ./server -diff examples/arrival.diff -monitors monitors.json -mode demo -output report.json -summary report.md
+go run ./server -diff examples/brew.diff -monitors monitors.json -mode demo -output report.json -summary report.md
 ```
 
 For a real model request, configure `OPENAI_API_KEY` and `OPENAI_MODEL` in the shell and replace `-mode demo` with `-mode ai`. CLI mode defaults to AI and does not start an HTTP server. Findings remain advisory; a successful analysis exits zero even if it finds potential impacts. Invalid inputs, unavailable credentials, API errors, and invalid reports exit nonzero.
@@ -79,9 +79,9 @@ For a real model request, configure `OPENAI_API_KEY` and `OPENAI_MODEL` in the s
 1. In GitHub, open this repository's **Settings → Secrets and variables → Actions**.
 2. Under **Secrets**, create a repository secret named `OPENAI_API_KEY` using your replacement API key. Do not commit the key or paste it into chat.
 3. Optionally, under **Variables**, add `OPENAI_MODEL`. The workflow defaults to `gpt-4.1-mini`.
-4. Open **Actions → Monitor impact → Run workflow** on `main`. This manual run analyzes `examples/arrival.diff`, making it a quick integration check before opening a PR.
+4. Open **Actions → Monitor impact → Run workflow** on `main`. This manual run analyzes `examples/brew.diff`, making it a quick integration check before opening a PR.
 5. Inspect the run summary and download `monitor-impact-report`. Confirm its JSON has `mode: ai` and the expected model. Manual runs make real API requests too.
-6. Create a branch, change the returned string in `examples/arrival.go` from `Driver_Arrival: Successful` to `marketplace fulfillment updated`, commit, push, and open a PR to `main`.
+6. Create a branch, change the log message in `examples/brewing.go` from `Coffee_Brew: Complete` to `Your coffee is ready`, commit, push, and open a PR to `main`.
 7. Open the PR's **Checks** and select **Monitor impact** to read the run summary. Updating the PR reruns the analysis. Reports are retained for seven days; API errors fail the check, while findings themselves do not.
 
 Replace `monitors.json` with your real inventory before expecting useful coverage. The workflow reads this file from the PR's base commit, so changes to monitor definitions take effect after merging them. All supplied diff text and monitor queries are sent to OpenAI.
@@ -95,3 +95,15 @@ The first version processes non-draft PRs from branches in the same repository. 
 Diffs over 100 KB are rejected rather than silently truncated. This avoids presenting a partial review as complete. Later we can add explicit batching and coverage reporting.
 
 Model reports are validated before use. If a completed response fails evidence or monitor-identity validation, the analyzer sends the failed report and validation feedback for one repair attempt. A second invalid answer fails the run; the checks are never relaxed. A repair can add one model call and its associated latency and cost. This improves structural reliability, not proof that the model's interpretation is correct.
+
+## Coffee-machine demo story
+
+Imagine a coffee machine with two monitors. **Coffee Brew Success** counts logs containing `Coffee_Brew: Complete`. **Cleaning Errors** searches for `service:coffee-machine status:error`.
+
+The sample PR makes three changes:
+
+- Rename the brew-complete message to `Your coffee is ready`. The success monitor may stop matching.
+- Lower a failed cleaning cycle from ERROR to WARN. The error monitor may miss it, depending on how severity maps to `status`.
+- Change the coffee menu label. That changes display text without changing a log event.
+
+Demo narration: “The machine still makes coffee, but our dashboard may stop counting it because the log text changed. The reviewer compares the code change with our monitor queries and suggests what to verify.” These are fictional examples.

@@ -1,5 +1,5 @@
 package examples
 
-func arrivalDisplayLabel() string {
-	return "Driver arrival"
+func coffeeDisplayLabel() string {
+	return "Coffee menu"
 }

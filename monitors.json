@@ -1,4 +1,4 @@
 [
-  {"name": "Driver Arrival Success", "query": "service:dispatch \"Driver_Arrival: Successful\""},
-  {"name": "Payment Errors", "query": "service:payments status:error"}
+  {"name": "Coffee Brew Success", "query": "service:coffee-machine \"Coffee_Brew: Complete\""},
+  {"name": "Cleaning Errors", "query": "service:coffee-machine status:error"}
 ]
